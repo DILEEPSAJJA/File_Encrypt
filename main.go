@@ -76,7 +76,7 @@ func decryptHandle() {
 	fmt.Println("\n file sucessfully decrypted")
 }
 
-func getPassword() []byte{
+func getPassword() []byte {
 
 	fmt.Print("Enter password")
 	password, _ := term.ReadPassword(0)
@@ -90,11 +90,15 @@ func getPassword() []byte{
 	return password
 }
 
-func validatePassword(password1 []byte, password2 []byte) bool {
-	if !bytes.Equal(password1, password2) {
-		return false
-	}
-	return true
+// func validatePassword(password1 []byte, password2 []byte) bool {
+// 	if !bytes.Equal(password1, password2) {
+// 		return false
+// 	};
+// 	return true
+// }
+
+func validatePassword(pw1, pw2 []byte) bool {
+	return bytes.Equal(pw1, pw2)
 }
 
 func validateFile(file string) bool {
