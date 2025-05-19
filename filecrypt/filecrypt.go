@@ -1,115 +1,134 @@
 package filecrypt
 
 import (
+	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha1"
+	"crypto/sha256"
+	//"encoding/binary"
+	"errors"
 	"io"
 	"os"
 
 	"golang.org/x/crypto/pbkdf2"
 )
 
-func Encrypt(source string, password []byte) {
-	if _, err := os.Stat(source); os.IsNotExist(err) {
-		panic(err.Error())
-	}
+const (
+	saltSize   = 16
+	nonceSize  = 12
+	keyLength  = 32
+	magicBytes = "FENC" // custom header
+)
 
-	srcFile, err := os.Open(source)
+// EncryptFile encrypts a file using a password and returns the path of the encrypted file
+func EncryptFile(inputPath string, password []byte) (string, error) {
+	input, err := os.Open(inputPath)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
-	defer srcFile.Close()
+	defer input.Close()
 
-	plaintext, err := io.ReadAll(srcFile)
+	plaintext, err := io.ReadAll(input)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 
-	nonce := make([]byte, 12)
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		panic(err.Error())
+	salt := make([]byte, saltSize)
+	if _, err := rand.Read(salt); err != nil {
+		return "", err
 	}
 
-	dk := pbkdf2.Key(password, nonce, 4096, 32, sha1.New)
+	nonce := make([]byte, nonceSize)
+	if _, err := rand.Read(nonce); err != nil {
+		return "", err
+	}
 
-	block, err := aes.NewCipher(dk)
+	key := pbkdf2.Key(password, salt, 4096, keyLength, sha256.New)
+
+	block, err := aes.NewCipher(key)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 
 	ciphertext := aesgcm.Seal(nil, nonce, plaintext, nil)
-	ciphertext = append(ciphertext, nonce...) // append nonce to end of ciphertext
 
-	dstFile, err := os.Create(source)
-	if err != nil {
-		panic(err.Error())
-	}
-	defer dstFile.Close()
+	var buffer bytes.Buffer
+	buffer.Write([]byte(magicBytes)) // write header
+	buffer.Write(salt)
+	buffer.Write(nonce)
+	buffer.Write(ciphertext)
 
-	_, err = dstFile.Write(ciphertext)
+	outPath := inputPath + ".enc"
+	output, err := os.Create(outPath)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
+	defer output.Close()
+
+	_, err = output.Write(buffer.Bytes())
+	return outPath, err
 }
 
-func Decrypt(source string, password []byte) {
-	if _, err := os.Stat(source); os.IsNotExist(err) {
-		panic(err.Error())
-	}
-
-	srcFile, err := os.Open(source)
+// DecryptFile decrypts an encrypted file using a password and returns the path of the decrypted file
+func DecryptFile(inputPath string, password []byte) (string, error) {
+	input, err := os.Open(inputPath)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
-	defer srcFile.Close()
+	defer input.Close()
 
-	ciphertext, err := io.ReadAll(srcFile)
+	data, err := io.ReadAll(input)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 
-	if len(ciphertext) < 12 {
-		panic("ciphertext too short")
+	if len(data) < len(magicBytes)+saltSize+nonceSize {
+		return "", errors.New("file too short or corrupted")
 	}
 
-	nonce := ciphertext[len(ciphertext)-12:]
-	ciphertext = ciphertext[:len(ciphertext)-12]
+	if string(data[:len(magicBytes)]) != magicBytes {
+		return "", errors.New("invalid file format")
+	}
 
-	dk := pbkdf2.Key(password, nonce, 4096, 32, sha1.New)
+	salt := data[len(magicBytes) : len(magicBytes)+saltSize]
+	nonce := data[len(magicBytes)+saltSize : len(magicBytes)+saltSize+nonceSize]
+	ciphertext := data[len(magicBytes)+saltSize+nonceSize:]
 
-	block, err := aes.NewCipher(dk)
+	key := pbkdf2.Key(password, salt, 4096, keyLength, sha256.New)
+
+	block, err := aes.NewCipher(key)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 
 	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
 
-	dstFile, err := os.Create(source)
+	outPath := inputPath + ".dec"
+	output, err := os.Create(outPath)
 	if err != nil {
-		panic(err.Error())
+		return "", err
 	}
-	defer dstFile.Close()
+	defer output.Close()
 
-	_, err = dstFile.Write(plaintext)
-	if err != nil {
-		panic(err.Error())
-	}
+	_, err = output.Write(plaintext)
+	return outPath, err
 }
+
+
 
 // package filecrypt
 
@@ -118,7 +137,6 @@ func Decrypt(source string, password []byte) {
 // 	"crypto/cipher"
 // 	"crypto/rand"
 // 	"crypto/sha1"
-// 	"encoding/hex"
 // 	"io"
 // 	"os"
 
@@ -126,7 +144,6 @@ func Decrypt(source string, password []byte) {
 // )
 
 // func Encrypt(source string, password []byte) {
-
 // 	if _, err := os.Stat(source); os.IsNotExist(err) {
 // 		panic(err.Error())
 // 	}
@@ -135,23 +152,19 @@ func Decrypt(source string, password []byte) {
 // 	if err != nil {
 // 		panic(err.Error())
 // 	}
-
 // 	defer srcFile.Close()
 
 // 	plaintext, err := io.ReadAll(srcFile)
-
 // 	if err != nil {
 // 		panic(err.Error())
 // 	}
-
-// 	key := password
 
 // 	nonce := make([]byte, 12)
 // 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 // 		panic(err.Error())
 // 	}
 
-// 	dk := pbkdf2.Key(key, nonce, 4096, 32, sha1.New)
+// 	dk := pbkdf2.Key(password, nonce, 4096, 32, sha1.New)
 
 // 	block, err := aes.NewCipher(dk)
 // 	if err != nil {
@@ -164,14 +177,12 @@ func Decrypt(source string, password []byte) {
 // 	}
 
 // 	ciphertext := aesgcm.Seal(nil, nonce, plaintext, nil)
-// 	ciphertext = append(ciphertext, nonce...)
+// 	ciphertext = append(ciphertext, nonce...) // append nonce to end of ciphertext
 
 // 	dstFile, err := os.Create(source)
-
 // 	if err != nil {
 // 		panic(err.Error())
 // 	}
-
 // 	defer dstFile.Close()
 
 // 	_, err = dstFile.Write(ciphertext)
@@ -184,27 +195,28 @@ func Decrypt(source string, password []byte) {
 // 	if _, err := os.Stat(source); os.IsNotExist(err) {
 // 		panic(err.Error())
 // 	}
+
 // 	srcFile, err := os.Open(source)
 // 	if err != nil {
 // 		panic(err.Error())
 // 	}
-
 // 	defer srcFile.Close()
 
 // 	ciphertext, err := io.ReadAll(srcFile)
-
 // 	if err != nil {
 // 		panic(err.Error())
 // 	}
 
-// 	key := password
-// 	salt := ciphertext[len(ciphertext)-12:]
-// 	str := hex.EncodeToString(salt)
-// 	nonce, err := hex.DecodeString(str)
+// 	if len(ciphertext) < 12 {
+// 		panic("ciphertext too short")
+// 	}
 
-// 	dk := pbkdf2.Key(key, nonce, 4096, 32, sha1.New)
+// 	nonce := ciphertext[len(ciphertext)-12:]
+// 	ciphertext = ciphertext[:len(ciphertext)-12]
+
+// 	dk := pbkdf2.Key(password, nonce, 4096, 32, sha1.New)
+
 // 	block, err := aes.NewCipher(dk)
-
 // 	if err != nil {
 // 		panic(err.Error())
 // 	}
@@ -214,7 +226,7 @@ func Decrypt(source string, password []byte) {
 // 		panic(err.Error())
 // 	}
 
-// 	plaintext, err := aesgcm.Open(nil, nonce, ciphertext[:len(ciphertext)-12], nil)
+// 	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
 // 	if err != nil {
 // 		panic(err.Error())
 // 	}
@@ -223,12 +235,12 @@ func Decrypt(source string, password []byte) {
 // 	if err != nil {
 // 		panic(err.Error())
 // 	}
-
 // 	defer dstFile.Close()
 
 // 	_, err = dstFile.Write(plaintext)
-
 // 	if err != nil {
 // 		panic(err.Error())
 // 	}
 // }
+
+
