@@ -47,7 +47,189 @@
       </button>
     </div>
 
-    <!-- Buttons -->
+    <!-- Dynamic Button -->
+    <div class="flex space-x-4">
+      <button onclick="handleUpload()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded w-full transition" id="actionBtn">
+        Process File
+      </button>
+    </div>
+
+    <!-- Feedback -->
+    <p id="result" class="text-sm text-center mt-2 h-5"></p>
+  </div>
+
+  <script>
+    const dropZone = document.getElementById("dropZone");
+    const fileInput = document.getElementById("fileInput");
+    const fileInfo = document.getElementById("fileInfo");
+    const resultText = document.getElementById("result");
+    const passwordInput = document.getElementById("password");
+    const togglePassword = document.getElementById("togglePassword");
+    const toggleBtn = document.getElementById("toggleDark");
+    const actionBtn = document.getElementById("actionBtn");
+
+    let selectedFile = null;
+    let currentMode = "encrypt"; // or "decrypt"
+
+    // Handle file selection & detect file type
+    function handleFileSelection(file) {
+      selectedFile = file;
+      fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+
+      if (file.name.endsWith(".enc")) {
+        currentMode = "decrypt";
+        passwordInput.placeholder = "Enter password to decrypt";
+        actionBtn.textContent = "🔓 Decrypt File";
+        actionBtn.classList.replace("bg-indigo-600", "bg-green-600");
+        actionBtn.classList.replace("hover:bg-indigo-700", "hover:bg-green-700");
+      } else {
+        currentMode = "encrypt";
+        passwordInput.placeholder = "Enter password to encrypt";
+        actionBtn.textContent = "🔒 Encrypt File";
+        actionBtn.classList.replace("bg-green-600", "bg-indigo-600");
+        actionBtn.classList.replace("hover:bg-green-700", "hover:bg-indigo-700");
+      }
+    }
+
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files.length > 0) {
+        handleFileSelection(fileInput.files[0]);
+      }
+    });
+
+    // Drag & Drop
+    dropZone.addEventListener("click", () => fileInput.click());
+    dropZone.addEventListener("dragover", e => {
+      e.preventDefault();
+      dropZone.classList.add("border-blue-500");
+    });
+    dropZone.addEventListener("dragleave", () => {
+      dropZone.classList.remove("border-blue-500");
+    });
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("border-blue-500");
+      const file = e.dataTransfer.files[0];
+      if (file) handleFileSelection(file);
+    });
+
+    // Toggle password visibility
+    togglePassword.addEventListener("click", () => {
+      const isVisible = passwordInput.type === "text";
+      passwordInput.type = isVisible ? "password" : "text";
+      togglePassword.textContent = isVisible ? "👁️" : "🙈";
+    });
+
+    // Upload handler (auto-mode based)
+    function handleUpload() {
+      const password = passwordInput.value.trim();
+      const file = selectedFile;
+
+      if (!file || !password) {
+        resultText.textContent = "⚠️ Please select a file and enter a password.";
+        resultText.className = "text-red-500 text-sm text-center";
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("password", password);
+
+      resultText.textContent = "🔄 Processing...";
+      resultText.className = "text-blue-500 text-sm text-center";
+
+      fetch(`http://localhost:8081/${currentMode}`, {
+        method: "POST",
+        body: formData,
+      })
+        .then(res => {
+          if (!res.ok) throw new Error("Server error");
+          return res.blob();
+        })
+        .then(blob => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = currentMode === "encrypt" ? "encrypted.enc" : "decrypted_file";
+          a.click();
+          resultText.textContent = "✅ Download complete.";
+          resultText.className = "text-green-500 text-sm text-center";
+        })
+        .catch(() => {
+          resultText.textContent = "❌ Error processing file.";
+          resultText.className = "text-red-500 text-sm text-center";
+        });
+    }
+
+    // Dark mode
+    function setTheme(isDark) {
+      document.documentElement.classList.toggle("dark", isDark);
+      localStorage.setItem("theme", isDark ? "dark" : "light");
+      toggleBtn.textContent = isDark ? "☀️ Light Mode" : "🌙 Dark Mode";
+    }
+
+    toggleBtn.addEventListener("click", () => {
+      const isDark = document.documentElement.classList.contains("dark");
+      setTheme(!isDark);
+    });
+
+    setTheme(localStorage.getItem("theme") === "dark");
+  </script>
+
+</body>
+</html>
+
+
+<!-- <!DOCTYPE html>
+<html lang="en" class="">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🔐 File Encryptor</title>
+  <link rel="icon" href="https://img.icons8.com/emoji/48/lock-emoji.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Segoe UI', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white min-h-screen flex items-center justify-center px-4 font-sans">
+
+  <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-lg space-y-6 transition-all">
+    <div class="flex justify-between items-center">
+      <h1 class="text-2xl font-bold tracking-tight flex items-center gap-2">
+        🔐 File Encryptor
+      </h1>
+      <button id="toggleDark" class="text-sm bg-gray-200 dark:bg-gray-700 px-3 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition">
+        🌙 Dark Mode
+      </button>
+    </div>
+
+  
+    <div id="dropZone" class="border-2 border-dashed border-gray-400 dark:border-gray-600 p-4 rounded text-center cursor-pointer hover:border-blue-500">
+      <p class="text-sm">📁 Drag & drop a file here or click to select</p>
+      <input id="fileInput" type="file" class="hidden" />
+    </div>
+    <div id="fileInfo" class="text-xs text-gray-500 dark:text-gray-400"></div>
+
+    <-- Password Input with Toggle 
+    <div class="relative">
+      <label for="password" class="block mb-1 font-medium text-sm">Password</label>
+      <input id="password" type="password" placeholder="Enter password" class="w-full p-2 pr-10 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm" />
+      <button id="togglePassword" type="button" class="absolute right-2 top-9 text-gray-500 dark:text-gray-300 text-sm">
+        👁️
+      </button>
+    </div>
+
+    
     <div class="flex space-x-4">
       <button onclick="handleUpload('encrypt')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded w-full transition">
         Encrypt
@@ -57,7 +239,6 @@
       </button>
     </div>
 
-    <!-- Feedback -->
     <p id="result" class="text-sm text-center mt-2 h-5"></p>
   </div>
 
@@ -157,255 +338,6 @@
     });
     setTheme(localStorage.getItem("theme") === "dark");
   </script>
-
-</body>
-</html>
-
-
-
-<!-- <!DOCTYPE html>
-<html lang="en" class="">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>File Encryptor</title>
-  <link rel="icon" href="🔒" />
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Segoe UI', 'sans-serif'],
-          },
-        },
-      },
-    };
-  </script>
-</head>
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white min-h-screen flex items-center justify-center px-4 font-sans">
-
-  <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-lg space-y-6 transition-all">
-    <div class="flex justify-between items-center">
-      <h1 class="text-2xl font-bold tracking-tight">🔐 File Encryptor</h1>
-      <button id="toggleDark" class="text-sm bg-gray-200 dark:bg-gray-700 px-3 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition">
-        🌙 Dark Mode
-      </button>
-    </div>
-
-    <div>
-      <label class="block mb-1 font-medium text-sm">Choose File</label>
-      <input id="fileInput" type="file" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm" />
-      <div id="fileInfo" class="mt-1 text-xs text-gray-500 dark:text-gray-400"></div>
-    </div>
-
-    <div>
-      <label for="password" class="block mb-1 font-medium text-sm">Password</label>
-      <input id="password" type="password" placeholder="Enter a strong password" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-sm" />
-    </div>
-
-    <div class="flex space-x-4">
-      <button onclick="handleUpload('encrypt')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded w-full transition">
-        Encrypt
-      </button>
-      <button onclick="handleUpload('decrypt')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded w-full transition">
-        Decrypt
-      </button>
-    </div>
-
-    <p id="result" class="text-sm text-center mt-2 h-5"></p>
-  </div>
-
-  <script>
-    const fileInput = document.getElementById('fileInput');
-    const fileInfo = document.getElementById('fileInfo');
-    const resultText = document.getElementById('result');
-    const passwordInput = document.getElementById('password');
-
-    fileInput.addEventListener('change', () => {
-      const file = fileInput.files[0];
-      if (file) {
-        fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
-      } else {
-        fileInfo.textContent = '';
-      }
-    });
-
-    function handleUpload(endpoint) {
-      const file = fileInput.files[0];
-      const password = passwordInput.value;
-
-      if (!file || !password) {
-        resultText.textContent = "Please select a file and enter a password.";
-        resultText.className = "text-red-500 text-sm text-center";
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("password", password);
-
-      resultText.textContent = "Processing...";
-      resultText.className = "text-blue-500 text-sm text-center";
-
-      fetch(`http://localhost:8081/${endpoint}`, {
-        method: "POST",
-        body: formData
-      })
-        .then(response => {
-          if (!response.ok) throw new Error("Failed to process file.");
-          return response.blob();
-        })
-        .then(blob => {
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = endpoint === "encrypt" ? "encrypted_file" : "decrypted_file";
-          a.click();
-          resultText.textContent = "✅ Download complete.";
-          resultText.className = "text-green-500 text-sm text-center";
-        })
-        .catch(err => {
-          console.error(err);
-          resultText.textContent = "❌ Something went wrong.";
-          resultText.className = "text-red-500 text-sm text-center";
-        });
-    }
-
-    // 🌙 Dark Mode Toggle with Persistence
-    const toggleBtn = document.getElementById("toggleDark");
-
-    function setTheme(isDark) {
-      document.documentElement.classList.toggle("dark", isDark);
-      localStorage.setItem("theme", isDark ? "dark" : "light");
-      toggleBtn.textContent = isDark ? "☀️ Light Mode" : "🌙 Dark Mode";
-    }
-
-    toggleBtn.addEventListener("click", () => {
-      const isDark = document.documentElement.classList.contains("dark");
-      setTheme(!isDark);
-    });
-
-    // Load stored theme
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "dark") {
-      setTheme(true);
-    } else {
-      setTheme(false);
-    }
-  </script>
-
-</body>
-</html> -->
-
-
-<!-- <!DOCTYPE html>
-<html lang="en" class="">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>File Encryptor</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-    };
-  </script>
-</head>
-<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white min-h-screen flex items-center justify-center px-4">
-
-  <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 w-full max-w-md space-y-5">
-    <div class="flex justify-between items-center">
-      <h1 class="text-xl font-bold">File Encryptor</h1>
-      <button id="toggleDark" class="text-sm bg-gray-200 dark:bg-gray-700 px-3 py-1 rounded hover:bg-gray-300 dark:hover:bg-gray-600">
-        🌙 Dark Mode
-      </button>
-    </div>
-
-    <input id="fileInput" type="file" class="w-full p-2 border rounded bg-white dark:bg-gray-700" />
-    <div id="fileInfo" class="text-sm text-gray-500 dark:text-gray-400"></div>
-
-    <input id="password" type="password" placeholder="Enter password" class="w-full p-2 border rounded bg-white dark:bg-gray-700" />
-
-    <div class="flex space-x-4">
-      <button onclick="handleUpload('encrypt')" class="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700">
-        Encrypt
-      </button>
-      <button onclick="handleUpload('decrypt')" class="bg-green-600 text-white px-4 py-2 rounded w-full hover:bg-green-700">
-        Decrypt
-      </button>
-    </div>
-
-    <p id="result" class="text-sm text-center"></p>
-  </div>
-
-  <script>
-    const fileInput = document.getElementById('fileInput');
-    const fileInfo = document.getElementById('fileInfo');
-    const resultText = document.getElementById('result');
-
-    fileInput.addEventListener('change', () => {
-      const file = fileInput.files[0];
-      if (file) {
-        fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
-      } else {
-        fileInfo.textContent = '';
-      }
-    });
-
-    function handleUpload(endpoint) {
-      const file = fileInput.files[0];
-      const password = document.getElementById('password').value;
-
-      if (!file || !password) {
-        alert("Both file and password are required.");
-        return;
-      }
-
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("password", password);
-
-      resultText.textContent = "Processing...";
-
-      fetch(`http://localhost:8081/${endpoint}`, {
-        method: "POST",
-        body: formData
-      })
-        .then(response => response.blob())
-        .then(blob => {
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = endpoint === "encrypt" ? "encrypted_file" : "decrypted_file";
-          a.click();
-          resultText.textContent = "Download complete.";
-        })
-        .catch(err => {
-          console.error(err);
-          resultText.textContent = "Something went wrong.";
-        });
-    }
-  </script>
-
-  <script>
-  const toggleBtn = document.getElementById("toggleDark");
-
-  function updateToggleLabel() {
-    const isDark = document.documentElement.classList.contains("dark");
-    toggleBtn.textContent = isDark ? "☀️ Light Mode" : "🌙 Dark Mode";
-  }
-
-  toggleBtn.addEventListener("click", () => {
-    document.documentElement.classList.toggle("dark");
-    updateToggleLabel();
-  });
-
-  // Set initial label based on current mode
-  updateToggleLabel();
-</script>
-
 
 </body>
 </html> -->
